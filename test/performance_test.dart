@@ -2,6 +2,60 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:perfos/performance_logic.dart';
 
 void main() {
+  final fGykx = AircraftWithCoeff(
+    name: 'F-GYKX',
+    takeoffTable: AircraftPerformance({
+      0.0: {
+        -20.0: {700.0: PerformanceEntry(130, 285), 900.0: PerformanceEntry(225, 480)},
+        0.0: {700.0: PerformanceEntry(145, 315), 900.0: PerformanceEntry(235, 535)},
+        20.0: {700.0: PerformanceEntry(165, 345), 900.0: PerformanceEntry(285, 590)},
+      },
+    }),
+    landing: AircraftPerformance({
+      0.0: {
+        -20.0: {700.0: PerformanceEntry(145, 365), 900.0: PerformanceEntry(185, 435)},
+        0.0: {700.0: PerformanceEntry(155, 385), 900.0: PerformanceEntry(200, 460)},
+        20.0: {700.0: PerformanceEntry(165, 400), 900.0: PerformanceEntry(210, 485)},
+      },
+    }),
+  );
+
+  final fBvcy = AircraftWithMultiTables(
+    name: 'F-BVCY',
+    takeoffDur: AircraftPerformance({
+      0.0: {
+        0.0: {700.0: PerformanceEntry(145, 315), 900.0: PerformanceEntry(255, 535)},
+      },
+    }),
+    takeoffHerbe: AircraftPerformance({
+      0.0: {
+        0.0: {700.0: PerformanceEntry(185, 355), 900.0: PerformanceEntry(360, 640)},
+      },
+    }),
+    landing: AircraftPerformance({
+      0.0: {
+        0.0: {700.0: PerformanceEntry(155, 385), 900.0: PerformanceEntry(200, 460)},
+      },
+    }),
+  );
+
+  final fHaix = AircraftWithCoeff(
+    name: 'F-HAIX',
+    takeoffTable: AircraftPerformance({
+      0.0: {
+        0.0: {900.0: PerformanceEntry(140, 290), 1100.0: PerformanceEntry(250, 515)},
+      },
+      8000.0: {
+        0.0: {900.0: PerformanceEntry(285, 590), 1100.0: PerformanceEntry(505, 1050)},
+      },
+    }),
+    landing: AircraftPerformance({
+      0.0: {
+        0.0: {845.0: PerformanceEntry(200, 450), 1045.0: PerformanceEntry(250, 530)},
+      },
+    }),
+  );
+
   group('Tests F-GYKX (Type : Coefficient Herbe)', () {
     test('Décollage - Valeur exacte (0ft, ISA, 900kg)', () {
       final res = fGykx.getTakeoffPerformance(0, 15, 900, 'Dur');
@@ -41,7 +95,6 @@ void main() {
 
     test('Décollage Herbe - Valeur du tableau spécifique', () {
       final res = fBvcy.getTakeoffPerformance(0, 15, 900, 'Herbe');
-      // Pour F-BVCY à 0ft/ISA/900kg, le tableau Herbe donne 360m (pas 255 * 1.15)
       expect(res.entry.roll, 360);
     });
 
@@ -67,13 +120,12 @@ void main() {
     test('Extrapolation - Altitude 10000ft (Hors tableau)', () {
       final res = fHaix.getTakeoffPerformance(10000, 15, 1100, 'Dur');
       expect(res.status, CalculationStatus.extrapolated);
-      expect(res.entry.roll, greaterThan(505)); // Doit être > à la valeur de 8000ft
+      expect(res.entry.roll, greaterThan(505));
     });
   });
 
   group('Tests Global Logic', () {
     test('Atmosphère ISA - Calcul Delta ISA', () {
-      // ISA à 4000ft est 7°C. Température 10°C => Delta ISA +3
       const alt = 4000.0;
       const temp = 10.0;
       double isaTemp = 15 - (2 * alt / 1000);
