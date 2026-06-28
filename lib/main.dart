@@ -7,10 +7,17 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'performance_logic.dart';
 import 'storage_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Point d'entrée principal de l'application Flutter.
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows)) {
+    // Initialise sqflite pour le desktop (windows ou linux)
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   runApp(const PerfosApp());
 }
 
