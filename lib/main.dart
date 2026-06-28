@@ -9,16 +9,27 @@ import 'performance_logic.dart';
 import 'storage_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'; // Import pour le web
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// Point d'entrée principal de l'application Flutter.
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (kIsWeb) {
     // Configuration magique pour le Web
     databaseFactory = databaseFactoryFfiWeb;
   } else if (defaultTargetPlatform == TargetPlatform.windows) {
-    // Configuration pour Windows
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(450, 800),          // Taille initiale (Mode Portrait : Largeur, Hauteur)
+      minimumSize: Size(350, 600),   // Taille minimale si l'utilisateur la redimensionne
+      center: true,                  // Centre la fenêtre sur l'écran au démarrage
+      title: "Perfos",               // Titre de la fenêtre Windows
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });    // Configuration sqlite pour Windows
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }

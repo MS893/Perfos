@@ -19,6 +19,7 @@ dependencies:
   path_provider: ^2.1.2
   sqflite_common_ffi: ^2.4.2
   sqflite_common_ffi_web: ^1.1.2
+  window_manager: ^0.5.1
 
 dev_dependencies:
   flutter_test:
