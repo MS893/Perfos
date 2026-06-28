@@ -9,12 +9,16 @@ import 'performance_logic.dart';
 import 'storage_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart'; // Import pour le web
 
 /// Point d'entrée principal de l'application Flutter.
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows)) {
-    // Initialise sqflite pour le desktop (windows ou linux)
+  if (kIsWeb) {
+    // Configuration magique pour le Web
+    databaseFactory = databaseFactoryFfiWeb;
+  } else if (defaultTargetPlatform == TargetPlatform.windows) {
+    // Configuration pour Windows
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
