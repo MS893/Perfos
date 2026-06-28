@@ -23,7 +23,7 @@ jobs:
 
       - name: 🏗️ Build Web
         # REMPLACEZ 'votre-nom-de-repo' par le nom exact de votre projet GitHub
-        run: flutter build web --release --base-href "/votre-nom-de-repo/"
+        run: flutter build web --release --base-href "/Perfos/"
 
       - name: 🚀 Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
