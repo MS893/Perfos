@@ -1,3 +1,5 @@
+// C:/Users/CH/StudioProjects/Perfos/lib/storage_service.dart
+
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -66,32 +68,38 @@ class StorageService {
     return result;
   }
   
+  /// Enregistre une valeur dans la table des paramètres.
+  Future<void> _saveSetting(String key, String value) async {
+    final db = await database;
+    await db.insert('settings', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Récupère une valeur depuis la table des paramètres.
+  Future<String?> _getSetting(String key) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    if (maps.isNotEmpty) return maps.first['value'] as String?;
+    return null;
+  }
+
   /// Enregistre le nom de l'avion sélectionné par l'utilisateur.
   Future<void> setSelectedAircraft(String name) async {
-    final db = await database;
-    await db.insert('settings', {'key': 'selected_aircraft', 'value': name}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _saveSetting('selected_aircraft', name);
   }
   
   /// Récupère le nom de l'avion sélectionné.
   Future<String?> getSelectedAircraft() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('settings', where: 'key = ?', whereArgs: ['selected_aircraft']);
-    if (maps.isNotEmpty) return maps.first['value'];
-    return null;
+    return await _getSetting('selected_aircraft');
   }
 
   /// Enregistre le niveau d'expérience du pilote.
   Future<void> setPilotLevel(String level) async {
-    final db = await database;
-    await db.insert('settings', {'key': 'pilot_level', 'value': level}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _saveSetting('pilot_level', level);
   }
 
   /// Récupère le niveau d'expérience du pilote (valeur par défaut : 'Expérimenté').
   Future<String> getPilotLevel() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('settings', where: 'key = ?', whereArgs: ['pilot_level']);
-    if (maps.isNotEmpty) return maps.first['value'];
-    return 'Expérimenté'; // Valeur par défaut
+    return (await _getSetting('pilot_level')) ?? 'Expérimenté';
   }
 
   /// Supprime un avion de la base de données locale.
@@ -102,15 +110,21 @@ class StorageService {
 
   /// Enregistre le mode de thème choisi (light/dark).
   Future<void> setThemeMode(String mode) async {
-    final db = await database;
-    await db.insert('settings', {'key': 'theme_mode', 'value': mode}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _saveSetting('theme_mode', mode);
   }
 
   /// Récupère le mode de thème enregistré (valeur par défaut : 'light').
   Future<String> getThemeMode() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('settings', where: 'key = ?', whereArgs: ['theme_mode']);
-    if (maps.isNotEmpty) return maps.first['value'];
-    return 'light'; // Valeur par défaut
+    return (await _getSetting('theme_mode')) ?? 'light';
+  }
+
+  /// Enregistre si le texte doit être affiché en grand.
+  Future<void> setIsLargeText(bool isLarge) async {
+    await _saveSetting('is_large_text', isLarge ? '1' : '0');
+  }
+
+  /// Récupère si le texte doit être affiché en grand (valeur par défaut : false).
+  Future<bool> getIsLargeText() async {
+    return (await _getSetting('is_large_text')) == '1';
   }
 }

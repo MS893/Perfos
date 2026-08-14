@@ -29,13 +29,29 @@ abstract class Aircraft {
   /// Nom de l'avion.
   final String name;
 
+  /// Paramètres de masse.
+  final double defaultMass;
+  final double? minMass;
+  final double? maxMass;
+  final bool isMassLocked;
+
   /// Performances à l'atterrissage.
   final AircraftPerformance landing;
 
-  Aircraft({required this.name, required this.landing});
+  Aircraft({
+    required this.name,
+    required this.landing,
+    this.defaultMass = 900.0,
+    this.minMass,
+    this.maxMass,
+    this.isMassLocked = false,
+  });
 
   /// Calcule les performances au décollage en fonction des conditions.
   PerformanceResult getTakeoffPerformance(double altitude, double temp, double mass, String runwayType);
+
+  /// Calcule les performances à l'atterrissage en fonction des conditions.
+  PerformanceResult getLandingPerformance(double altitude, double temp, double mass, String runwayType);
 
   /// Calcule le facteur de correction pour le vent au décollage.
   double calculateWindFactorTakeoff(double wind);
@@ -45,6 +61,9 @@ abstract class Aircraft {
 
   /// Détermine si le vent saisi est dans les limites des tables ou s'il s'agit d'une extrapolation.
   CalculationStatus getWindStatus(double wind) {
+    if (name.contains('WT9')) {
+      return (wind >= -10 && wind <= 30) ? CalculationStatus.exact : CalculationStatus.extrapolated;
+    }
     return (wind >= 0 && wind <= 30) ? CalculationStatus.exact : CalculationStatus.extrapolated;
   }
 
@@ -67,6 +86,10 @@ class AircraftWithCoeff extends Aircraft {
     required super.name,
     required this.takeoffTable,
     required super.landing,
+    super.defaultMass,
+    super.minMass,
+    super.maxMass,
+    super.isMassLocked,
     this.grassFactor = 1.15,
   });
 
@@ -84,7 +107,24 @@ class AircraftWithCoeff extends Aircraft {
   }
 
   @override
+  PerformanceResult getLandingPerformance(double altitude, double temp, double mass, String runwayType) {
+    PerformanceResult res = landing.calculate(altitude, temp, mass);
+    if (res.status == CalculationStatus.noData) return res;
+    if (runwayType == 'Herbe') {
+      return PerformanceResult(
+        PerformanceEntry(res.entry.roll * grassFactor, res.entry.distance * grassFactor),
+        res.status,
+      );
+    }
+    return res;
+  }
+
+  @override
   double calculateWindFactorTakeoff(double wind) {
+    if (name.contains('WT9')) {
+      if (wind >= 0) return 1.0; // Pas de règle vent de face pour le WT9
+      return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
+    }
     if (wind >= 0) {
       if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.85);
       if (wind <= 20) return landing.interpolate(wind, 10, 0.85, 20, 0.65);
@@ -95,6 +135,10 @@ class AircraftWithCoeff extends Aircraft {
 
   @override
   double calculateWindFactorLanding(double wind) {
+    if (name.contains('WT9')) {
+      if (wind >= 0) return 1.0; // Pas de règle vent de face pour le WT9
+      return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
+    }
     if (wind >= 0) {
       if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
       if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
@@ -108,6 +152,10 @@ class AircraftWithCoeff extends Aircraft {
     'name': name,
     'type': 'coeff',
     'grassFactor': grassFactor,
+    'defaultMass': defaultMass,
+    'minMass': minMass,
+    'maxMass': maxMass,
+    'isMassLocked': isMassLocked,
     'takeoffTable': takeoffTable.toJson(),
     'landing': landing.toJson(),
   };
@@ -117,18 +165,28 @@ class AircraftWithCoeff extends Aircraft {
     takeoffTable: AircraftPerformance.fromJson(json['takeoffTable']),
     landing: AircraftPerformance.fromJson(json['landing']),
     grassFactor: json['grassFactor']?.toDouble() ?? 1.15,
+    defaultMass: json['defaultMass']?.toDouble() ?? 900.0,
+    minMass: json['minMass']?.toDouble(),
+    maxMass: json['maxMass']?.toDouble(),
+    isMassLocked: json['isMassLocked'] ?? false,
   );
 }
 
 class AircraftWithMultiTables extends Aircraft {
   final AircraftPerformance takeoffDur;
   final AircraftPerformance takeoffHerbe;
+  final AircraftPerformance? landingHerbe;
 
   AircraftWithMultiTables({
     required super.name,
     required this.takeoffDur,
     required this.takeoffHerbe,
     required super.landing,
+    super.defaultMass,
+    super.minMass,
+    super.maxMass,
+    super.isMassLocked,
+    this.landingHerbe,
   });
 
   @override
@@ -140,7 +198,19 @@ class AircraftWithMultiTables extends Aircraft {
   }
 
   @override
+  PerformanceResult getLandingPerformance(double altitude, double temp, double mass, String runwayType) {
+    if (runwayType == 'Herbe' && landingHerbe != null) {
+      return landingHerbe!.calculate(altitude, temp, mass);
+    }
+    return landing.calculate(altitude, temp, mass);
+  }
+
+  @override
   double calculateWindFactorTakeoff(double wind) {
+    if (name.contains('WT9')) {
+      if (wind >= 0) return 1.0; // Pas de règle vent de face pour le WT9
+      return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
+    }
     if (wind >= 0) {
       if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
       if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
@@ -151,6 +221,10 @@ class AircraftWithMultiTables extends Aircraft {
 
   @override
   double calculateWindFactorLanding(double wind) {
+    if (name.contains('WT9')) {
+      if (wind >= 0) return 1.0; // Pas de règle vent de face pour le WT9
+      return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
+    }
     if (wind >= 0) {
       if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
       if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
@@ -163,9 +237,14 @@ class AircraftWithMultiTables extends Aircraft {
   Map<String, dynamic> toJson() => {
     'name': name,
     'type': 'multi',
+    'defaultMass': defaultMass,
+    'minMass': minMass,
+    'maxMass': maxMass,
+    'isMassLocked': isMassLocked,
     'takeoffDur': takeoffDur.toJson(),
     'takeoffHerbe': takeoffHerbe.toJson(),
     'landing': landing.toJson(),
+    if (landingHerbe != null) 'landingHerbe': landingHerbe!.toJson(),
   };
 
   factory AircraftWithMultiTables.fromJson(Map<String, dynamic> json) => AircraftWithMultiTables(
@@ -173,6 +252,11 @@ class AircraftWithMultiTables extends Aircraft {
     takeoffDur: AircraftPerformance.fromJson(json['takeoffDur']),
     takeoffHerbe: AircraftPerformance.fromJson(json['takeoffHerbe']),
     landing: AircraftPerformance.fromJson(json['landing']),
+    landingHerbe: json['landingHerbe'] != null ? AircraftPerformance.fromJson(json['landingHerbe']) : null,
+    defaultMass: json['defaultMass']?.toDouble() ?? 900.0,
+    minMass: json['minMass']?.toDouble(),
+    maxMass: json['maxMass']?.toDouble(),
+    isMassLocked: json['isMassLocked'] ?? false,
   );
 }
 
