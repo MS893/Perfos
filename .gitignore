@@ -12,6 +12,7 @@ build/
 build/app/outputs/apk/debug/app-debug.apk
 # Par sécurité, on ignore tous les fichiers .apk et .ipa (trop lourds pour Git)
 *.apk
+*.aab
 *.ipa
 
 # --- Android ---
@@ -21,6 +22,8 @@ local.properties
 *.jks
 *.keystore
 /android/app/src/main/res/values/google_services.json
+android/app/release/
+android/app/build/
 
 # --- iOS / macOS ---
 ios/.symlinks/
