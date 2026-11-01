@@ -279,7 +279,7 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
               const TextSpan(text: "© 2026 SkyDev\n\n"),
               TextSpan(text: "$support : "),
               TextSpan(
-                text: supportUrl,
+                text: "Cliquez ici",
                 style: const TextStyle(
                   color: Colors.blue,
                   decoration: TextDecoration.underline,
@@ -302,16 +302,21 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
 
   /// Télécharge les données d'un avion depuis le catalogue en ligne.
   Future<void> _downloadAircraft(String fileName) async {
-    final url = 'https://ms893.github.io/MesApplications/assets/perfos/$fileName';
+    // Ajout d'un timestamp pour forcer le téléchargement de la version la plus récente (anti-cache)
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final url = 'https://ms893.github.io/MesApplications/assets/perfos/$fileName?t=$timestamp';
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final aircraft = Aircraft.fromJson(data);
+        
         await _storage.saveAircraft(aircraft);
         await _loadData();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Avion ${aircraft.name} ajouté !')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Avion ${aircraft.name} ajouté !'))
+          );
         }
       } else {
         throw Exception('Erreur de téléchargement (${response.statusCode})');
@@ -331,13 +336,20 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
   /// Récupère la liste des fichiers d'avions disponibles sur le dépôt GitHub.
   Future<List<String>> _getOnlineCatalog() async {
     try {
-      final response = await http.get(Uri.parse('https://api.github.com/repos/ms893/MesApplications/contents/assets/perfos'));
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final url = 'https://api.github.com/repos/ms893/MesApplications/contents/assets/perfos?t=$timestamp';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'Accept': 'application/vnd.github.v3+json'},
+      );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data
             .where((item) => item['type'] == 'file' && item['name'].toString().endsWith('.json'))
             .map((item) => item['name'].toString())
             .toList();
+      } else {
+        debugPrint('Erreur GitHub API: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       debugPrint('Erreur lors de la lecture du catalogue en ligne : $e');
@@ -809,31 +821,45 @@ class PlaneResultView extends StatelessWidget {
     double toRoll = takeoffRes.entry.roll * windFactorTakeoff;
     double toDist = takeoffRes.entry.distance * windFactorTakeoff;
 
-    PerformanceResult landingRes = aircraft!.getLandingPerformance(altitude!, temp!, mass!, runwayType);
-    double windFactorLanding = aircraft!.calculateWindFactorLanding(wind!);
-    double ldRoll = landingRes.entry.roll * windFactorLanding;
-    double ldDist = landingRes.entry.distance * windFactorLanding;
+    List<String> warnings = [];
+    if (aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!) {
+      warnings.add('Masse > masse max atterrissage (${aircraft!.maxLandingMass!.toInt()} kg)');
+    }
 
-    if (surfaceState == 'Mouillée') {
-      if (runwayType == 'Dur') {
-        toRoll *= 1.10;
-        toDist *= 1.10;
-        ldRoll *= 1.15;
-        ldDist *= 1.15;
-      } else {
-        // Herbe
-        toRoll *= 1.15;
-        toDist *= 1.15;
-        ldRoll *= 1.20;
-        ldDist *= 1.20;
+    bool isLandingMassExceeded = aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!;
+
+    PerformanceResult? landingRes;
+    double windFactorLanding = 1.0;
+    double ldRoll = 0.0;
+    double ldDist = 0.0;
+
+    if (!isLandingMassExceeded) {
+      landingRes = aircraft!.getLandingPerformance(altitude!, temp!, mass!, runwayType);
+      windFactorLanding = aircraft!.calculateWindFactorLanding(wind!);
+      ldRoll = landingRes.entry.roll * windFactorLanding;
+      ldDist = landingRes.entry.distance * windFactorLanding;
+
+      if (surfaceState == 'Mouillée') {
+        if (runwayType == 'Dur') {
+          ldRoll *= 1.15;
+          ldDist *= 1.15;
+        } else {
+          // Herbe
+          ldRoll *= 1.20;
+          ldDist *= 1.20;
+        }
       }
     }
 
     double safetyFactor = pilotLevel == 'Débutant' ? 1.40 : 1.20;
     double toDistSafety = toDist * safetyFactor;
-    double ldDistSafety = ldDist * safetyFactor;
+    double ldDistSafety = !isLandingMassExceeded ? (ldDist * safetyFactor) : 0.0;
 
-    CalculationStatus finalStatus = _getWorstStatus([takeoffRes.status, landingRes.status, aircraft!.getWindStatus(wind!)]);
+    CalculationStatus finalStatus = _getWorstStatus([
+      takeoffRes.status,
+      isLandingMassExceeded ? CalculationStatus.exact : landingRes!.status,
+      aircraft!.getWindStatus(wind!)
+    ]);
     bool isUlmExtrapolated = planeName == 'WT9 ULM' && (altitude != 0 || temp != 15);
 
     return SingleChildScrollView(
@@ -844,23 +870,54 @@ class PlaneResultView extends StatelessWidget {
             if (finalStatus == CalculationStatus.noData) 
               const Padding(padding: EdgeInsets.all(20.0), child: Text('Données non disponibles.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))
             else ...[
-              if (isUlmExtrapolated || finalStatus != CalculationStatus.exact) 
+              if (warnings.isNotEmpty)
+                _buildWarningsView(warnings),
+              if (isUlmExtrapolated || (finalStatus != CalculationStatus.exact && warnings.isEmpty)) 
                 _buildStatusWarning(finalStatus, isUlmExtrapolated: isUlmExtrapolated) 
-              else 
+              else if (warnings.isEmpty)
                 const SizedBox(height: 16),
               _buildSectionTitle('DÉCOLLAGE (Passage 15m)'),
               _buildResultRow(context, 'Roulement', toRoll, isDark ? Colors.blue.shade900.withValues(alpha: 0.3) : Colors.blue.shade50),
               _buildDualResultRow(context, 'Distance Totale', toDistSafety, toDist, isDark ? Colors.blue.shade800.withValues(alpha: 0.4) : Colors.blue.shade100),
               const SizedBox(height: 12),
               _buildSectionTitle('ATTERRISSAGE (Passage 15m)'),
-              _buildResultRow(context, 'Roulement', ldRoll, isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50),
-              _buildDualResultRow(context, 'Distance Totale', ldDistSafety, ldDist, isDark ? Colors.green.shade800.withValues(alpha: 0.4) : Colors.green.shade100),
+              if (isLandingMassExceeded)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text('Aucun résultat (Masse > masse max atterrissage)', style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic, fontWeight: FontWeight.bold)),
+                )
+              else ...[
+                _buildResultRow(context, 'Roulement', ldRoll, isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50),
+                _buildDualResultRow(context, 'Distance Totale', ldDistSafety, ldDist, isDark ? Colors.green.shade800.withValues(alpha: 0.4) : Colors.green.shade100),
+              ],
               const SizedBox(height: 20),
-              _buildInfoCard(context, windFactorTakeoff, windFactorLanding),
+              _buildInfoCard(context, windFactorTakeoff, isLandingMassExceeded ? 1.0 : windFactorLanding),
             ]
           ],
         ),
       ),
+    );
+  }
+
+  /// Construit une vue pour afficher les avertissements explicites.
+  Widget _buildWarningsView(List<String> warnings) {
+    return Column(
+      children: warnings.map((w) => Container(
+        margin: const EdgeInsets.only(bottom: 8, top: 4),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text(w, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12))),
+          ],
+        ),
+      )).toList(),
     );
   }
 
@@ -905,7 +962,7 @@ class PlaneResultView extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 2.0),
     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Text(label, style: const TextStyle(fontSize: 13)),
-      Container(width: 90, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white10)), child: Text('${value.toStringAsFixed(0)} m', style: const TextStyle(fontSize: 16))),
+      Container(width: 90, padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white10)), child: Text('${value.ceil()} m', style: const TextStyle(fontSize: 16))),
     ]),
   );
 
@@ -914,9 +971,9 @@ class PlaneResultView extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 2.0),
     child: Row(children: [
       Expanded(flex: 3, child: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
-      Container(width: 90, padding: const EdgeInsets.symmetric(vertical: 4), decoration: BoxDecoration(color: Colors.orange.shade900.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade700.withValues(alpha: 0.5))), child: Center(child: Text('${safetyValue.toStringAsFixed(0)} m*', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)))),
+      Container(width: 90, padding: const EdgeInsets.symmetric(vertical: 4), decoration: BoxDecoration(color: Colors.orange.shade900.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.orange.shade700.withValues(alpha: 0.5))), child: Center(child: Text('${safetyValue.ceil()} m*', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepOrange)))),
       const SizedBox(width: 12),
-      Container(width: 90, padding: const EdgeInsets.symmetric(vertical: 4), decoration: BoxDecoration(color: tableBgColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white10)), child: Center(child: Text('${tableValue.toStringAsFixed(0)} m', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)))),
+      Container(width: 90, padding: const EdgeInsets.symmetric(vertical: 4), decoration: BoxDecoration(color: tableBgColor, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white10)), child: Center(child: Text('${tableValue.ceil()} m', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)))),
     ]),
   );
 

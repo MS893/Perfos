@@ -41,6 +41,7 @@ void main() {
 
   final fHaix = AircraftWithCoeff(
     name: 'F-HAIX',
+    maxLandingMass: 1045.0,
     takeoffTable: AircraftPerformance({
       0.0: {
         0.0: {900.0: PerformanceEntry(140, 290), 1100.0: PerformanceEntry(250, 515)},
@@ -121,6 +122,10 @@ void main() {
       final res = fHaix.getTakeoffPerformance(10000, 15, 1100, 'Dur');
       expect(res.status, CalculationStatus.extrapolated);
       expect(res.entry.roll, greaterThan(505));
+    });
+
+    test('Atterrissage - maxLandingMass property', () {
+      expect(fHaix.maxLandingMass, 1045.0);
     });
   });
 

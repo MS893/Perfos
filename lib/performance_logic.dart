@@ -33,6 +33,7 @@ abstract class Aircraft {
   final double defaultMass;
   final double? minMass;
   final double? maxMass;
+  final double? maxLandingMass;
   final bool isMassLocked;
 
   /// Performances à l'atterrissage.
@@ -44,6 +45,7 @@ abstract class Aircraft {
     this.defaultMass = 900.0,
     this.minMass,
     this.maxMass,
+    this.maxLandingMass,
     this.isMassLocked = false,
   });
 
@@ -89,6 +91,7 @@ class AircraftWithCoeff extends Aircraft {
     super.defaultMass,
     super.minMass,
     super.maxMass,
+    super.maxLandingMass,
     super.isMassLocked,
     this.grassFactor = 1.15,
   });
@@ -155,6 +158,7 @@ class AircraftWithCoeff extends Aircraft {
     'defaultMass': defaultMass,
     'minMass': minMass,
     'maxMass': maxMass,
+    if (maxLandingMass != null) 'maxLandingMass': maxLandingMass,
     'isMassLocked': isMassLocked,
     'takeoffTable': takeoffTable.toJson(),
     'landing': landing.toJson(),
@@ -168,6 +172,7 @@ class AircraftWithCoeff extends Aircraft {
     defaultMass: json['defaultMass']?.toDouble() ?? 900.0,
     minMass: json['minMass']?.toDouble(),
     maxMass: json['maxMass']?.toDouble(),
+    maxLandingMass: json['maxLandingMass']?.toDouble(),
     isMassLocked: json['isMassLocked'] ?? false,
   );
 }
@@ -185,6 +190,7 @@ class AircraftWithMultiTables extends Aircraft {
     super.defaultMass,
     super.minMass,
     super.maxMass,
+    super.maxLandingMass,
     super.isMassLocked,
     this.landingHerbe,
   });
@@ -240,6 +246,7 @@ class AircraftWithMultiTables extends Aircraft {
     'defaultMass': defaultMass,
     'minMass': minMass,
     'maxMass': maxMass,
+    if (maxLandingMass != null) 'maxLandingMass': maxLandingMass,
     'isMassLocked': isMassLocked,
     'takeoffDur': takeoffDur.toJson(),
     'takeoffHerbe': takeoffHerbe.toJson(),
@@ -256,6 +263,7 @@ class AircraftWithMultiTables extends Aircraft {
     defaultMass: json['defaultMass']?.toDouble() ?? 900.0,
     minMass: json['minMass']?.toDouble(),
     maxMass: json['maxMass']?.toDouble(),
+    maxLandingMass: json['maxLandingMass']?.toDouble(),
     isMassLocked: json['isMassLocked'] ?? false,
   );
 }
