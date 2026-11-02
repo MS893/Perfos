@@ -1,11 +1,26 @@
 {
-  "last_updated": "2026-11-02T10:00:00Z",
+  "last_updated": "2026-11-02T11:00:00Z",
   "items": [
     {
-      "id": "1",
-      "title": "Nom de l'élément",
-      "description": "Description...",
-      "url": "..."
+      "id": "perfos",
+      "title": "Perfos (Version actuelle)",
+      "description": "Calculateur de performances de décollage et atterrissage pour aviation légère.",
+      "url": "https://ms893.github.io/Perfos/",
+      "version": "1.4.0"
+    },
+    {
+      "id": "radio_ppl",
+      "title": "Radio PPL",
+      "description": "Outil d'entraînement aux radiotélécommunications aéronautiques.",
+      "url": "https://github.io/ms893/radio_ppl",
+      "version": "1.0.0"
+    },
+    {
+      "id": "mes_applications",
+      "title": "Mes autres applications",
+      "description": "Découvrez l'ensemble de mes outils et applications hébergés en ligne.",
+      "url": "https://ms893.github.io/MesApplications/",
+      "version": "2.0.0"
     }
   ]
 }
