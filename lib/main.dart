@@ -96,6 +96,47 @@ class PerfosAppState extends State<PerfosApp> {
         brightness: Brightness.dark,
       ),
       themeMode: _themeMode,
+      builder: (context, child) {
+        final width = MediaQuery.of(context).size.width;
+        bool isDesktop = width > 600;
+
+        return Scaffold(
+          // Fond de la page web (gris neutre pour faire ressortir le "téléphone")
+          backgroundColor: isDesktop ? Colors.grey[850] : Colors.transparent,
+          body: Center(
+            child: Container(
+              constraints: BoxConstraints(
+                maxWidth: isDesktop ? 500 : double.infinity, // Largeur type smartphone
+                maxHeight: isDesktop ? 1000 : double.infinity, // Hauteur maximale optionnelle sur PC
+              ),
+              margin: EdgeInsets.symmetric(vertical: isDesktop ? 24.0 : 0.0),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                // Effet "coque" : coins arrondis et bordure subtile sur grand écran
+                borderRadius: BorderRadius.circular(isDesktop ? 32.0 : 0.0),
+                border: isDesktop
+                    ? Border.all(color: Colors.black.withOpacity(0.3), width: 8.0) // "Bordure" du téléphone
+                    : null,
+                boxShadow: isDesktop
+                    ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20.0,
+                    spreadRadius: 5.0,
+                    offset: const Offset(0, 10),
+                  ),
+                ]
+                    : [],
+              ),
+              // ClipRRect permet de s'assurer que le contenu à l'intérieur respecte bien les coins arrondis de la coque
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(isDesktop ? 24.0 : 0.0),
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
       home: const PerformanceCalculator(),
     );
   }
@@ -407,6 +448,13 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
         Uri.parse(url),
         headers: {'Accept': 'application/vnd.github.v3+json'},
       );
+
+      // Affichage systématique dans la console de debug pour analyse
+      print('--- REPONSE GITHUB API ---');
+      print('Statut : ${response.statusCode}');
+      print('Corps de la réponse : ${response.body}');
+      print('--------------------------');
+
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data
@@ -414,10 +462,11 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
             .map((item) => item['name'].toString())
             .toList();
       } else {
-        debugPrint('Erreur GitHub API: ${response.statusCode} - ${response.body}');
+        debugPrint('Erreur GitHub API (${response.statusCode}) : ${response.body}');
       }
-    } catch (e) {
-      debugPrint('Erreur lors de la lecture du catalogue en ligne : $e');
+    } catch (e, stackTrace) {
+      debugPrint('Erreur Exception lors de la lecture du catalogue : $e');
+      debugPrint('Stacktrace : $stackTrace');
     }
     return [];
   }
