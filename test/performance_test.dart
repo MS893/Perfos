@@ -103,6 +103,11 @@ void main() {
       final factor = fBvcy.calculateWindFactorTakeoff(10);
       expect(factor, 0.78);
     });
+
+    test('Vent - Correction Atterrissage Face 10kt F-GYKX (x0.78)', () {
+      final factor = fGykx.calculateWindFactorLanding(10);
+      expect(factor, 0.78);
+    });
   });
 
   group('Tests F-HAIX (Type : Nouvelles Masses)', () {
@@ -126,6 +131,23 @@ void main() {
 
     test('Atterrissage - maxLandingMass property', () {
       expect(fHaix.maxLandingMass, 1045.0);
+    });
+
+    test('Atterrissage - Masse > 1045kg bornée à 1045kg', () {
+      double mass = 1100;
+      double landingMass = (fHaix.maxLandingMass != null && mass > fHaix.maxLandingMass!)
+          ? fHaix.maxLandingMass!
+          : mass;
+      final res = fHaix.getLandingPerformance(0, 15, landingMass, 'Dur');
+      final res1045 = fHaix.getLandingPerformance(0, 15, 1045, 'Dur');
+      expect(landingMass, 1045.0);
+      expect(res.entry.roll, res1045.entry.roll);
+      expect(res.entry.distance, res1045.entry.distance);
+    });
+
+    test('Vent - Correction Atterrissage Face 10kt F-HAIX (x0.85)', () {
+      final factor = fHaix.calculateWindFactorLanding(10);
+      expect(factor, 0.85);
     });
   });
 

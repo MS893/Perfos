@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'dart:math' as math;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
@@ -115,6 +116,8 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
   /// Contrôleurs pour les champs de saisie numérique.
   final TextEditingController _altitudeController = TextEditingController(text: '0');
   final FocusNode _altitudeFocusNode = FocusNode();
+  final TextEditingController _qnhController = TextEditingController(text: '1013');
+  final FocusNode _qnhFocusNode = FocusNode();
   final TextEditingController _tempController = TextEditingController(text: '15');
   final FocusNode _tempFocusNode = FocusNode();
   final TextEditingController _massController = TextEditingController();
@@ -142,10 +145,12 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
     super.initState();
     _loadData();
     _altitudeController.addListener(() => setState(() {}));
+    _qnhController.addListener(() => setState(() {}));
     _tempController.addListener(() => setState(() {}));
     _massController.addListener(() => setState(() {}));
     _windController.addListener(() => setState(() {}));
     _altitudeFocusNode.addListener(_handleAltitudeFocusChange);
+    _qnhFocusNode.addListener(_handleQnhFocusChange);
     _tempFocusNode.addListener(_handleTempFocusChange);
     _massFocusNode.addListener(_handleMassFocusChange);
     _windFocusNode.addListener(_handleWindFocusChange);
@@ -157,6 +162,17 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
       if (val != null) {
         if (val < -1000) _altitudeController.text = '-1000';
         else if (val > 10000) _altitudeController.text = '10000';
+        setState(() {});
+      }
+    }
+  }
+
+  void _handleQnhFocusChange() {
+    if (!_qnhFocusNode.hasFocus) {
+      final double? val = double.tryParse(_qnhController.text);
+      if (val != null) {
+        if (val < 850) _qnhController.text = '850';
+        else if (val > 1100) _qnhController.text = '1100';
         setState(() {});
       }
     }
@@ -204,6 +220,8 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
   void dispose() {
     _altitudeController.dispose();
     _altitudeFocusNode.dispose();
+    _qnhController.dispose();
+    _qnhFocusNode.dispose();
     _tempController.dispose();
     _tempFocusNode.dispose();
     _massController.dispose();
@@ -216,7 +234,35 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
   /// Charge les avions et les paramètres utilisateur depuis le stockage local.
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final aircrafts = await _storage.getAircrafts();
+    List<Aircraft> aircrafts = await _storage.getAircrafts();
+
+    Aircraft? haix;
+    for (var a in aircrafts) {
+      if (a.name.toUpperCase().contains('HAIX') || a.name.toUpperCase().contains('180')) {
+        haix = a;
+        break;
+      }
+    }
+    bool petitPasExists = aircrafts.any((a) => a.name.toUpperCase().contains('PETIT'));
+
+    if (haix != null && !petitPasExists && haix is AircraftWithCoeff) {
+      final petitPas = AircraftWithCoeff(
+        name: 'DR400 180 Petit Pas',
+        takeoffTable: haix.takeoffTable,
+        landing: haix.landing,
+        defaultMass: haix.defaultMass,
+        minMass: haix.minMass,
+        maxMass: haix.maxMass,
+        maxLandingMass: haix.maxLandingMass,
+        isMassLocked: haix.isMassLocked,
+        grassFactor: haix.grassFactor,
+        takeoffWindFactors: haix.takeoffWindFactors,
+        landingWindFactors: haix.landingWindFactors,
+      );
+      await _storage.saveAircraft(petitPas);
+      aircrafts = await _storage.getAircrafts();
+    }
+
     final selectedName = await _storage.getSelectedAircraft();
     final pilotLevel = await _storage.getPilotLevel();
     final isLargeText = await _storage.getIsLargeText();
@@ -312,6 +358,24 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
         final aircraft = Aircraft.fromJson(data);
         
         await _storage.saveAircraft(aircraft);
+
+        if ((aircraft.name.toUpperCase().contains('HAIX') || aircraft.name.toUpperCase().contains('180')) && aircraft is AircraftWithCoeff) {
+          final petitPas = AircraftWithCoeff(
+            name: 'DR400 180 Petit Pas',
+            takeoffTable: aircraft.takeoffTable,
+            landing: aircraft.landing,
+            defaultMass: aircraft.defaultMass,
+            minMass: aircraft.minMass,
+            maxMass: aircraft.maxMass,
+            maxLandingMass: aircraft.maxLandingMass,
+            isMassLocked: aircraft.isMassLocked,
+            grassFactor: aircraft.grassFactor,
+            takeoffWindFactors: aircraft.takeoffWindFactors,
+            landingWindFactors: aircraft.landingWindFactors,
+          );
+          await _storage.saveAircraft(petitPas);
+        }
+
         await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -563,16 +627,25 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-    double? altitude = double.tryParse(_altitudeController.text);
+    double? terrainAlt = double.tryParse(_altitudeController.text);
+    double? qnh = double.tryParse(_qnhController.text) ?? 1013.25;
     double? temp = double.tryParse(_tempController.text);
     double? mass = double.tryParse(_massController.text);
     double? wind = double.tryParse(_windController.text);
 
+    // Zp = altitude terrain + (1013.25 - QNH) * 27
+    double? altitude;
+    if (terrainAlt != null) {
+      altitude = terrainAlt + (1013.25 - qnh) * 27;
+    }
+
     String deltaISAText = "--";
+    String zpText = "";
     if (altitude != null && temp != null) {
       double isaTemp = 15 - (2 * altitude / 1000);
       double deltaISA = temp - isaTemp;
       deltaISAText = "ISA ${deltaISA >= 0 ? '+' : ''}${deltaISA.toStringAsFixed(1)}°C";
+      zpText = "Zp : ${altitude.toStringAsFixed(0)} ft";
     }
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -634,7 +707,7 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
                             child: TextField(
                               controller: _altitudeController,
                               focusNode: _altitudeFocusNode,
-                              decoration: const InputDecoration(labelText: 'Altitude (ft)', border: OutlineInputBorder()),
+                              decoration: const InputDecoration(labelText: 'Altitude terrain (ft)', border: OutlineInputBorder()),
                               keyboardType: const TextInputType.numberWithOptions(signed: true),
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(RegExp(r'^-?\d*')),
@@ -650,6 +723,30 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
                             ),
                           ),
                           const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _qnhController,
+                              focusNode: _qnhFocusNode,
+                              decoration: const InputDecoration(labelText: 'QNH (hPa)', border: OutlineInputBorder()),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(4),
+                              ],
+                              onChanged: (value) {
+                                final val = double.tryParse(value);
+                                if (val != null && val > 1100) {
+                                  _qnhController.text = '1100';
+                                  _qnhController.selection = TextSelection.fromPosition(TextPosition(offset: _qnhController.text.length));
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
                           Expanded(
                             child: TextField(
                               controller: _tempController,
@@ -669,13 +766,7 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
                               },
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Align(alignment: Alignment.centerRight, child: Text('Atmosphère : $deltaISAText', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade700, fontStyle: FontStyle.italic))),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
+                          const SizedBox(width: 10),
                           Expanded(
                             child: TextField(
                               controller: _massController,
@@ -707,7 +798,19 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
                               },
                             ),
                           ),
-                          const SizedBox(width: 10),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'Atmosphère : $deltaISAText  |  $zpText',
+                          style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade700, fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
                           Expanded(
                             child: TextField(
                               controller: _windController,
@@ -727,16 +830,35 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
                               },
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          const Text('Piste :'),
-                          DropdownButton<String>(value: _runwayType, items: ['Dur', 'Herbe'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setState(() => _runwayType = val!)),
-                          const Text('État :'),
-                          DropdownButton<String>(value: _surfaceState, items: ['Sèche', 'Mouillée'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (val) => setState(() => _surfaceState = val!)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Piste :'),
+                                    DropdownButton<String>(
+                                      value: _runwayType,
+                                      items: ['Dur', 'Herbe'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                                      onChanged: (val) => setState(() => _runwayType = val!),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('État :'),
+                                    DropdownButton<String>(
+                                      value: _surfaceState,
+                                      items: ['Sèche', 'Mouillée'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                                      onChanged: (val) => setState(() => _surfaceState = val!),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -814,53 +936,68 @@ class PlaneResultView extends StatelessWidget {
       return const Center(child: Text('Données manquantes ou invalides.'));
     }
 
+    if ((aircraft!.minMass != null && mass! < aircraft!.minMass!) ||
+        (aircraft!.maxMass != null && mass! > aircraft!.maxMass!)) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Text(
+            'Masse hors limites de l\'avion',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     PerformanceResult takeoffRes = aircraft!.getTakeoffPerformance(altitude!, temp!, mass!, runwayType);
     double windFactorTakeoff = aircraft!.calculateWindFactorTakeoff(wind!);
-    double toRoll = takeoffRes.entry.roll * windFactorTakeoff;
-    double toDist = takeoffRes.entry.distance * windFactorTakeoff;
+    double toRoll = math.max(0.0, takeoffRes.entry.roll * windFactorTakeoff);
+    double toDist = math.max(0.0, takeoffRes.entry.distance * windFactorTakeoff);
 
     List<String> warnings = [];
     if (aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!) {
       warnings.add('Masse > masse max atterrissage (${aircraft!.maxLandingMass!.toInt()} kg)');
     }
 
-    bool isLandingMassExceeded = aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!;
+    double landingMass = (aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!)
+        ? aircraft!.maxLandingMass!
+        : mass!;
 
-    PerformanceResult? landingRes;
-    double windFactorLanding = 1.0;
-    double ldRoll = 0.0;
-    double ldDist = 0.0;
+    PerformanceResult landingRes = aircraft!.getLandingPerformance(altitude!, temp!, landingMass, runwayType);
+    double windFactorLanding = aircraft!.calculateWindFactorLanding(wind!);
+    double ldRoll = math.max(0.0, landingRes.entry.roll * windFactorLanding);
+    double ldDist = math.max(0.0, landingRes.entry.distance * windFactorLanding);
 
-    if (!isLandingMassExceeded) {
-      landingRes = aircraft!.getLandingPerformance(altitude!, temp!, mass!, runwayType);
-      windFactorLanding = aircraft!.calculateWindFactorLanding(wind!);
-      ldRoll = landingRes.entry.roll * windFactorLanding;
-      ldDist = landingRes.entry.distance * windFactorLanding;
-
-      if (surfaceState == 'Mouillée') {
-        if (runwayType == 'Dur') {
-          ldRoll *= 1.15;
-          ldDist *= 1.15;
-        } else {
-          // Herbe
-          ldRoll *= 1.20;
-          ldDist *= 1.20;
-        }
+    if (surfaceState == 'Mouillée') {
+      if (runwayType == 'Dur') {
+        ldRoll = math.max(0.0, ldRoll * 1.15);
+        ldDist = math.max(0.0, ldDist * 1.15);
+      } else {
+        // Herbe
+        ldRoll = math.max(0.0, ldRoll * 1.20);
+        ldDist = math.max(0.0, ldDist * 1.20);
       }
     }
 
     double safetyFactor = pilotLevel == 'Débutant' ? 1.40 : 1.20;
-    double toDistSafety = toDist * safetyFactor;
-    double ldDistSafety = !isLandingMassExceeded ? (ldDist * safetyFactor) : 0.0;
+    double toDistSafety = math.max(0.0, toDist * safetyFactor);
+    double ldDistSafety = math.max(0.0, ldDist * safetyFactor);
 
     CalculationStatus finalStatus = _getWorstStatus([
       takeoffRes.status,
-      isLandingMassExceeded ? CalculationStatus.exact : landingRes!.status,
+      landingRes.status,
       aircraft!.getWindStatus(wind!)
     ]);
     bool isUlmExtrapolated = planeName == 'WT9 ULM' && (altitude != 0 || temp != 15);
+
+    bool isLandingMassExceeded = aircraft!.maxLandingMass != null && mass! > aircraft!.maxLandingMass!;
+
+    String landingTitle = isLandingMassExceeded
+        ? 'ATTERRISSAGE (Passage 15m) [${aircraft!.maxLandingMass!.toInt()} kg]'
+        : 'ATTERRISSAGE (Passage 15m)';
 
     return SingleChildScrollView(
       child: Padding(
@@ -880,18 +1017,11 @@ class PlaneResultView extends StatelessWidget {
               _buildResultRow(context, 'Roulement', toRoll, isDark ? Colors.blue.shade900.withValues(alpha: 0.3) : Colors.blue.shade50),
               _buildDualResultRow(context, 'Distance Totale', toDistSafety, toDist, isDark ? Colors.blue.shade800.withValues(alpha: 0.4) : Colors.blue.shade100),
               const SizedBox(height: 12),
-              _buildSectionTitle('ATTERRISSAGE (Passage 15m)'),
-              if (isLandingMassExceeded)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('Aucun résultat (Masse > masse max atterrissage)', style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic, fontWeight: FontWeight.bold)),
-                )
-              else ...[
-                _buildResultRow(context, 'Roulement', ldRoll, isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50),
-                _buildDualResultRow(context, 'Distance Totale', ldDistSafety, ldDist, isDark ? Colors.green.shade800.withValues(alpha: 0.4) : Colors.green.shade100),
-              ],
+              _buildSectionTitle(landingTitle),
+              _buildResultRow(context, 'Roulement', ldRoll, isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50),
+              _buildDualResultRow(context, 'Distance Totale', ldDistSafety, ldDist, isDark ? Colors.green.shade800.withValues(alpha: 0.4) : Colors.green.shade100),
               const SizedBox(height: 20),
-              _buildInfoCard(context, windFactorTakeoff, isLandingMassExceeded ? 1.0 : windFactorLanding),
+              _buildInfoCard(context, windFactorTakeoff, windFactorLanding),
             ]
           ],
         ),
@@ -1004,6 +1134,16 @@ class PlaneResultView extends StatelessWidget {
         if (planeName == 'WT9 LSA')
           const Text(
             '• WT9 LSA : Décollage volets 15° (Flaps 1), Atterrissage volets 24° (Flaps 2)',
+            style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontStyle: FontStyle.italic),
+          ),
+        if (planeName.toUpperCase().contains('GYKX') || planeName.toUpperCase().contains('120'))
+          const Text(
+            '• Hélice SENSENICH 72 CK S6-0-56',
+            style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontStyle: FontStyle.italic),
+          ),
+        if (planeName.toUpperCase().contains('PETIT'))
+          const Text(
+            '• Hélice SENSENICH 7GEMBS5-0-58',
             style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontStyle: FontStyle.italic),
           ),
       ])),

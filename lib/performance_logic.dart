@@ -83,6 +83,8 @@ abstract class Aircraft {
 class AircraftWithCoeff extends Aircraft {
   final AircraftPerformance takeoffTable;
   final double grassFactor;
+  final List<double> takeoffWindFactors;
+  final List<double> landingWindFactors;
 
   AircraftWithCoeff({
     required super.name,
@@ -91,22 +93,31 @@ class AircraftWithCoeff extends Aircraft {
     super.defaultMass,
     super.minMass,
     super.maxMass,
-    super.maxLandingMass,
+    double? maxLandingMass,
     super.isMassLocked,
     this.grassFactor = 1.15,
-  });
+    List<double>? takeoffWindFactors,
+    List<double>? landingWindFactors,
+  }) : takeoffWindFactors = takeoffWindFactors ?? [0.85, 0.65, 0.55],
+       landingWindFactors = landingWindFactors ?? 
+           ((name.toUpperCase().contains('HAIX') || name.toUpperCase().contains('180')) ? [0.85, 0.65, 0.55] : [0.78, 0.63, 0.52]),
+       super(
+         maxLandingMass: maxLandingMass ?? 
+             ((name.toUpperCase().contains('HAIX') || name.toUpperCase().contains('180') || (defaultMass != null && defaultMass >= 1100.0) || (maxMass != null && maxMass >= 1100.0)) ? 1045.0 : null),
+       );
 
   @override
   PerformanceResult getTakeoffPerformance(double altitude, double temp, double mass, String runwayType) {
     PerformanceResult res = takeoffTable.calculate(altitude, temp, mass);
     if (res.status == CalculationStatus.noData) return res;
+    double factor = name.toUpperCase().contains('PETIT') ? 0.86 : 1.0;
     if (runwayType == 'Herbe') {
-      return PerformanceResult(
-        PerformanceEntry(res.entry.roll * grassFactor, res.entry.distance * grassFactor),
-        res.status,
-      );
+      factor *= grassFactor;
     }
-    return res;
+    return PerformanceResult(
+      PerformanceEntry(res.entry.roll * factor, res.entry.distance * factor),
+      res.status,
+    );
   }
 
   @override
@@ -129,9 +140,13 @@ class AircraftWithCoeff extends Aircraft {
       return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
     }
     if (wind >= 0) {
-      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.85);
-      if (wind <= 20) return landing.interpolate(wind, 10, 0.85, 20, 0.65);
-      return landing.interpolate(wind, 20, 0.65, 30, 0.55);
+      final f10 = takeoffWindFactors.isNotEmpty ? takeoffWindFactors[0] : 0.85;
+      final f20 = takeoffWindFactors.length > 1 ? takeoffWindFactors[1] : 0.65;
+      final f30 = takeoffWindFactors.length > 2 ? takeoffWindFactors[2] : 0.55;
+      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, f10);
+      if (wind <= 20) return landing.interpolate(wind, 10, f10, 20, f20);
+      if (wind <= 30) return landing.interpolate(wind, 20, f20, 30, f30);
+      return f30;
     }
     return 1.0 + (wind.abs() / 2.0) * 0.10;
   }
@@ -143,9 +158,13 @@ class AircraftWithCoeff extends Aircraft {
       return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
     }
     if (wind >= 0) {
-      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
-      if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
-      return landing.interpolate(wind, 20, 0.63, 30, 0.52);
+      final f10 = landingWindFactors.isNotEmpty ? landingWindFactors[0] : 0.78;
+      final f20 = landingWindFactors.length > 1 ? landingWindFactors[1] : 0.63;
+      final f30 = landingWindFactors.length > 2 ? landingWindFactors[2] : 0.52;
+      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, f10);
+      if (wind <= 20) return landing.interpolate(wind, 10, f10, 20, f20);
+      if (wind <= 30) return landing.interpolate(wind, 20, f20, 30, f30);
+      return f30;
     }
     return 1.0 + (wind.abs() / 2.0) * 0.10;
   }
@@ -160,6 +179,8 @@ class AircraftWithCoeff extends Aircraft {
     'maxMass': maxMass,
     if (maxLandingMass != null) 'maxLandingMass': maxLandingMass,
     'isMassLocked': isMassLocked,
+    'takeoffWindFactors': takeoffWindFactors,
+    'landingWindFactors': landingWindFactors,
     'takeoffTable': takeoffTable.toJson(),
     'landing': landing.toJson(),
   };
@@ -174,6 +195,12 @@ class AircraftWithCoeff extends Aircraft {
     maxMass: json['maxMass']?.toDouble(),
     maxLandingMass: json['maxLandingMass']?.toDouble(),
     isMassLocked: json['isMassLocked'] ?? false,
+    takeoffWindFactors: json['takeoffWindFactors'] != null
+        ? (json['takeoffWindFactors'] as List).map((e) => (e as num).toDouble()).toList()
+        : null,
+    landingWindFactors: json['landingWindFactors'] != null
+        ? (json['landingWindFactors'] as List).map((e) => (e as num).toDouble()).toList()
+        : null,
   );
 }
 
@@ -181,6 +208,8 @@ class AircraftWithMultiTables extends Aircraft {
   final AircraftPerformance takeoffDur;
   final AircraftPerformance takeoffHerbe;
   final AircraftPerformance? landingHerbe;
+  final List<double> takeoffWindFactors;
+  final List<double> landingWindFactors;
 
   AircraftWithMultiTables({
     required super.name,
@@ -190,10 +219,17 @@ class AircraftWithMultiTables extends Aircraft {
     super.defaultMass,
     super.minMass,
     super.maxMass,
-    super.maxLandingMass,
+    double? maxLandingMass,
     super.isMassLocked,
     this.landingHerbe,
-  });
+    List<double>? takeoffWindFactors,
+    List<double>? landingWindFactors,
+  }) : takeoffWindFactors = takeoffWindFactors ?? [0.78, 0.63, 0.52],
+       landingWindFactors = landingWindFactors ?? [0.78, 0.63, 0.52],
+       super(
+         maxLandingMass: maxLandingMass ?? 
+             ((name.toUpperCase().contains('HAIX') || name.toUpperCase().contains('180') || (defaultMass != null && defaultMass >= 1100.0) || (maxMass != null && maxMass >= 1100.0)) ? 1045.0 : null),
+       );
 
   @override
   PerformanceResult getTakeoffPerformance(double altitude, double temp, double mass, String runwayType) {
@@ -218,9 +254,13 @@ class AircraftWithMultiTables extends Aircraft {
       return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
     }
     if (wind >= 0) {
-      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
-      if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
-      return landing.interpolate(wind, 20, 0.63, 30, 0.52);
+      final f10 = takeoffWindFactors.isNotEmpty ? takeoffWindFactors[0] : 0.78;
+      final f20 = takeoffWindFactors.length > 1 ? takeoffWindFactors[1] : 0.63;
+      final f30 = takeoffWindFactors.length > 2 ? takeoffWindFactors[2] : 0.52;
+      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, f10);
+      if (wind <= 20) return landing.interpolate(wind, 10, f10, 20, f20);
+      if (wind <= 30) return landing.interpolate(wind, 20, f20, 30, f30);
+      return f30;
     }
     return 1.0 + (wind.abs() / 2.0) * 0.10;
   }
@@ -232,9 +272,13 @@ class AircraftWithMultiTables extends Aircraft {
       return 1.0 + (wind.abs() * 0.05); // +5% par kt de vent arrière
     }
     if (wind >= 0) {
-      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, 0.78);
-      if (wind <= 20) return landing.interpolate(wind, 10, 0.78, 20, 0.63);
-      return landing.interpolate(wind, 20, 0.63, 30, 0.52);
+      final f10 = landingWindFactors.isNotEmpty ? landingWindFactors[0] : 0.78;
+      final f20 = landingWindFactors.length > 1 ? landingWindFactors[1] : 0.63;
+      final f30 = landingWindFactors.length > 2 ? landingWindFactors[2] : 0.52;
+      if (wind <= 10) return landing.interpolate(wind, 0, 1.0, 10, f10);
+      if (wind <= 20) return landing.interpolate(wind, 10, f10, 20, f20);
+      if (wind <= 30) return landing.interpolate(wind, 20, f20, 30, f30);
+      return f30;
     }
     return 1.0 + (wind.abs() / 2.0) * 0.10;
   }
@@ -248,6 +292,8 @@ class AircraftWithMultiTables extends Aircraft {
     'maxMass': maxMass,
     if (maxLandingMass != null) 'maxLandingMass': maxLandingMass,
     'isMassLocked': isMassLocked,
+    'takeoffWindFactors': takeoffWindFactors,
+    'landingWindFactors': landingWindFactors,
     'takeoffDur': takeoffDur.toJson(),
     'takeoffHerbe': takeoffHerbe.toJson(),
     'landing': landing.toJson(),
@@ -265,6 +311,12 @@ class AircraftWithMultiTables extends Aircraft {
     maxMass: json['maxMass']?.toDouble(),
     maxLandingMass: json['maxLandingMass']?.toDouble(),
     isMassLocked: json['isMassLocked'] ?? false,
+    takeoffWindFactors: json['takeoffWindFactors'] != null
+        ? (json['takeoffWindFactors'] as List).map((e) => (e as num).toDouble()).toList()
+        : null,
+    landingWindFactors: json['landingWindFactors'] != null
+        ? (json['landingWindFactors'] as List).map((e) => (e as num).toDouble()).toList()
+        : null,
   );
 }
 
