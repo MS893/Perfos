@@ -17,6 +17,29 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+    val configureAndroid = { p: Project ->
+        val android = p.extensions.findByName("android")
+        if (android != null) {
+            try {
+                android.javaClass.getMethod("setCompileSdk", Int::class.java).invoke(android, 37)
+            } catch (_: Exception) {
+                try {
+                    android.javaClass.getMethod("setCompileSdkVersion", Int::class.java).invoke(android, 37)
+                } catch (_: Exception) {
+                    try {
+                        android.javaClass.getMethod("setCompileSdkVersion", String::class.java).invoke(android, "android-37")
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+    if (state.executed) {
+        configureAndroid(this)
+    } else {
+        afterEvaluate {
+            configureAndroid(this)
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

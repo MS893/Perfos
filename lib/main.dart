@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:window_manager/window_manager.dart';
+import 'catalog_screen.dart';
 
 /// Point d'entrée principal de l'application Flutter.
 Future<void> main() async {
@@ -673,6 +674,12 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
               switch (value) {
                 case 'settings': _showSettingsDialog(); break;
                 case 'about': _showAboutDialog(); break;
+                case 'catalog':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CatalogScreen()),
+                  );
+                  break;
                 case 'mesapplications': _launchURL('https://ms893.github.io/MesApplications/'); break;
                 case 'donate': _launchURL('https://ko-fi.com/skydev_13'); break;
                 case 'share': SharePlus.instance.share(ShareParams(text: 'Découvrez Perfos !')); break;
@@ -681,6 +688,7 @@ class _PerformanceCalculatorState extends State<PerformanceCalculator> {
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings), title: Text('Paramètres'))),
               const PopupMenuItem(value: 'about', child: ListTile(leading: Icon(Icons.help_outline), title: Text('À propos'))),
+              const PopupMenuItem(value: 'catalog', child: ListTile(leading: Icon(Icons.list_alt), title: Text('Voir le catalogue'))), // <-- Ajout ici
               const PopupMenuItem(value: 'mesapplications', child: ListTile(leading: Icon(Icons.apps), title: Text('Mes applications'))),
               const PopupMenuItem(value: 'donate', child: ListTile(leading: Icon(Icons.card_giftcard), title: Text('Faire un don'))),
               const PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.share), title: Text('Partager'))),

@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class CatalogService {
   // Remplacez par votre URL GitHub Pages réelle
-  static const String jsonUrl = 'https://<votre-username>.github.io/<votre-repo>/index.json';
+  static const String jsonUrl = 'https://ms893.github.io/Perfos/index.json';
 
   Future<List<dynamic>> fetchCatalog() async {
     final response = await http.get(Uri.parse(jsonUrl));
